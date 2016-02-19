@@ -1,6 +1,7 @@
 #import collections
 # GenomeGraphSimulation (master) conda create -n compbio python=3 anaconda
 import copy
+import matplotlib.pyplot as plt
 import numpy as np
 import networkx as nx
 
@@ -91,4 +92,6 @@ class GraphSimulator:
 gs = GraphSimulator()
 gs.run()
 gr = gs.give_me_a_networkx_graph()
+nx.draw(gr)
+plt.savefig("fig.png")
 
