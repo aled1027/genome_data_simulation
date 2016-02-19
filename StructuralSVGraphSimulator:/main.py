@@ -95,9 +95,6 @@ class StructuralSVGraphSimulator:
                     break
 
     def create_shorter_fragments(self):
-        # TODO: this argument needs to be more robust, where the fragments
-        # are adjusted based on the deletion, not just removed
-
         """creates shorter_fragment based on longer_fragments.
         assumes longer_fragments is already populated"""
         # again, writing this in the most naiive, unpythonic way
@@ -131,7 +128,6 @@ class StructuralSVGraphSimulator:
         if self.adj_mat is None: self.generate_adjacency_matrix()
         self.nx_graph = nx.Graph(self.adj_mat)
 
-    @property
     def nx_density(self):
         if self.nx_graph is None:
             return -1
@@ -142,6 +138,7 @@ class StructuralSVGraphSimulator:
             self.make_networkx_graph()
         for line in nx.generate_edgelist(self.nx_graph, data=False):
             print(line)
+
     def save_nx_fig(self, filename):
         if self.nx_graph is None:
             self.make_networkx_graph()
@@ -154,13 +151,15 @@ class StructuralSVGraphSimulator:
         # the worst way this could possibly be written.
         # whatever.
         self.adj_mat = {}
-        for u in self.longer_fragments:
-            for v in self.longer_fragments:
+        for i,u in enumerate(self.longer_fragments):
+            u_name = str(i) + "_" + str(u)
+            for j,v in enumerate(self.longer_fragments):
+                v_name = str(j) + "_" + str(v)
                 if u.intersect(v):
                     if u in self.adj_mat:
-                        self.adj_mat[u].append(v)
+                        self.adj_mat[u_name].append(v_name)
                     else:
-                        self.adj_mat[u] = [v]
+                        self.adj_mat[u_name] = [v_name]
 
     def find_k_shortest_paths(self, k):
         """ finds k shortest paths using PathLinker.
