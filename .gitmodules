@@ -1,3 +1,6 @@
 [submodule "GraphSpace"]
 	path = GraphSpace
 	url = https://github.com/Murali-group/GraphSpace
+[submodule "PathLinker"]
+	path = PathLinker
+	url = https://github.com/Murali-group/PathLinker.git
