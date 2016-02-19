@@ -2,16 +2,22 @@
 # GenomeGraphSimulation (master) conda create -n compbio python=3 anaconda
 import copy
 import numpy as np
+import networkx as nx
 
 class Fragment:
     def __init__(self, start=0, end=0):
         self.start = start
         self.end = end
 
-    def intersect(self, other)
-
-        """ Other is a fragment object.
-        returns true if the self and other fragment object intersect each other"""
+    def intersect(self, other):
+        """ Returns true if self and other intersect
+        :param other: a fragment object
+        """
+        if self.start <= other.start <= self.end or \
+                self.start <= other.end <= self.end:
+            return True
+        else:
+            return False
 
     def __len__(self):
         return self.end - self.start
@@ -23,42 +29,46 @@ class Fragment:
         return str(self)
 
 class GraphSimulator:
-
-    # also using a poisson distribution
-
     def __init__(self):
-        self.longer_seq = 300
-        self.deletion = Fragment(50,150)
-        self.coverage = 1 # TODO change to 30
-        self.poisson_lambda = 50
-        self.bases_per_fragment = 50
+        self.longer_seq = 10
+        self.deletion = Fragment(5, 7)
+        self.coverage = 1
+        self.poisson_lambda = 2
+        self.bases_per_fragment = 2
         self.longer_fragments = []
         self.shorter_fragments = []
-
+        self.adj_mat = {}
 
     def run(self):
         """ main argument"""
         self.generate_fragments_for_longer_sequence()
-        self.shorter_fragments = copy.deepcopy(self.longer_fragments)
-        self.shorter_fragments = self.filter_around_deletion(self.shorter_fragments)
+        self.create_shorter_fragments()
 
-    def generate_graph(self):
+    def give_me_a_networkx_graph(self):
+        self.generate_adjacency_matrix()
+        return nx.Graph(self.adj_mat)
+
+
+    def generate_adjacency_matrix(self):
         """ Using self.longer_fragments and self.shorter_fragments,
         generate a graph. """
+        # the worst way this could possibly be written.
+        # whatever.
+        self.adj_mat = {}
+        for u in self.longer_fragments:
+            for v in self.longer_fragments:
+                if u.intersect(v):
+                    if u in self.adj_mat:
+                        self.adj_mat[u].append(v)
+                    else:
+                        self.adj_mat[u] = [v]
 
-
-
-
-    def filter_around_deletion(self, frags):
-        def _avoids_deletion(x):
-            """ takes a Fragment object as input.
-            Returns True if Fragment avoids the deletion, else False"""
-            if self.deletion.start <= x.start <= self.deletion.end or \
-                    self.deletion.start <= x.end <= self.deletion.end:
-                return False
-            else:
-                return True
-        return filter(_avoids_deletion, frags)
+    def create_shorter_fragments(self):
+        """creates shorter_fragment based on longer_fragments.
+        assumes longer_fragments is already populated"""
+        self.shorter_fragments = copy.deepcopy(self.longer_fragments)
+        no_intersect = lambda x : False if self.deletion.intersect(x) else True
+        return filter(no_intersect, self.shorter_fragments)
 
     def generate_fragments_for_longer_sequence(self):
         for _ in range(self.coverage):
@@ -78,7 +88,7 @@ class GraphSimulator:
     def __repr__(self):
         return str(self)
 
-G = GraphSimulator()
-G.run()
-print(G)
+gs = GraphSimulator()
+gs.run()
+gr = gs.give_me_a_networkx_graph()
 
