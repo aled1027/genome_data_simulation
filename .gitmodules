@@ -1,0 +1,3 @@
+[submodule "GraphSpace"]
+	path = GraphSpace
+	url = https://github.com/Murali-group/GraphSpace
