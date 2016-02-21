@@ -35,11 +35,17 @@ class Fragment:
             return True
         return False
 
+    def __hash__(self):
+        return int(self.start) * 10000 + self.end
+
+    def __eq__(self, other):
+        return self.start == other.start and self.end == other.end
+
     def __len__(self):
         return self.end - self.start
 
     def __str__(self):
-        return str(self.start)
+        return str(self.start) + ":" + str(self.end)
 #        return "Fragment(start={}, end={})".format(self.start, self.end)
 
     def __repr__(self):
@@ -49,9 +55,10 @@ class StructuralSVGraphSimulator:
     def __init__(self):
         simple = True
         if simple:
+            print("using simple parameters")
             self.longer_seq = 12
-            self.deletion = Fragment(6, 6)
-            self.coverage = 20
+            self.deletion = Fragment(6, 7)
+            self.coverage = 3
             self.poisson_lambda = 1
             self.bases_per_fragment = 3
             self.longer_fragments = []
@@ -61,6 +68,7 @@ class StructuralSVGraphSimulator:
             self.adj_mat = None
             self.nx_graph = None
         else:
+            print("using real parameters")
             self.longer_seq = 600
             self.deletion = Fragment(200, 400)
             self.coverage = 30
@@ -123,27 +131,72 @@ class StructuralSVGraphSimulator:
                 self.targets.append(frag)
 
     def make_networkx_graph(self):
-        # TODO: there's a bug here where it won't add two nodes
+        """ based on self.longer_fragments and self.shorter_fragments,
+        make a networkx graph"""
+        self.nx_graph = nx.Graph()
+        all_nodes = list(set(self.longer_fragments).union(set(self.shorter_fragments)))
+        for i,u in enumerate(all_nodes):
+            u_name = str(i) + "_" + str(u)
+
+            f = None
+            if u in self.longer_fragments and u in self.shorter_fragments:
+                f = "both"
+            elif u in self.shorter_fragments:
+                f = "shorter"
+            elif u in self.longer_fragments:
+                f = "longer"
+            else:
+                raise RuntimeError("messed up")
+            self.nx_graph.add_node(u_name, frag=f)
+
+            for j,v in enumerate(all_nodes):
+                if u.intersect(v):
+                    v_name = str(j) + "_" + str(v)
+                    self.nx_graph.add_edge(u_name, v_name, frag=f)
+
+    def old_make_networkx_graph(self):
         # for two fragments that start in the same place
-        if self.adj_mat is None: self.generate_adjacency_matrix()
+        if self.adj_mat is None:
+            self.generate_adjacency_matrix()
         self.nx_graph = nx.Graph(self.adj_mat)
 
     def nx_density(self):
-        if self.nx_graph is None:
-            return -1
+        assert(self.nx_graph is not None)
         return nx.density(self.nx_graph)
 
-    def print_edgelist(self):
-        if self.nx_graph is None:
-            self.make_networkx_graph()
-        for line in nx.generate_edgelist(self.nx_graph, data=False):
-            print(line)
+    def draw_nx(self, filename):
+        print("drawing")
+        assert(self.nx_graph is not None)
 
-    def save_nx_fig(self, filename):
-        if self.nx_graph is None:
-            self.make_networkx_graph()
+        # settings
+        node_size = 450 #default is 300
+        font_size = 5.5
+
         pos = nx.spring_layout(self.nx_graph)
-        nx.draw(self.nx_graph, pos)
+        #pos = nx.spectral_layout(self.nx_graph)
+
+        blue_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'longer']
+        red_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'shorter']
+        purple_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'both']
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=blue_nodes, \
+                node_size=node_size, node_color='b')
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=red_nodes, \
+                node_size=node_size, node_color='r')
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=purple_nodes, \
+                node_size=node_size, node_color='#aa8cc5')
+
+        nx.draw_networkx_edges(self.nx_graph, pos)
+        nx.draw_networkx_labels(self.nx_graph, pos, font_size=font_size)
+
+        # For adding legend -- covering up some nodes
+        # import matplotlib.patches as mpatches
+        #blue_patch = mpatches.Patch(color='blue', label='only longer')
+        #red_patch = mpatches.Patch(color='red', label='only shorter')
+        #purple_patch = mpatches.Patch(color='purple', label='both')
+        #plt.legend(handles=[red_patch, blue_patch, purple_patch])
+
+        #plt.title("red=shorter, blue=longer, purple=both")
+        plt.savefig(filename)
 
     def generate_adjacency_matrix(self):
         """ Using self.longer_fragments and self.shorter_fragments,
@@ -156,7 +209,7 @@ class StructuralSVGraphSimulator:
             for j,v in enumerate(self.longer_fragments):
                 v_name = str(j) + "_" + str(v)
                 if u.intersect(v):
-                    if u in self.adj_mat:
+                    if u_name in self.adj_mat:
                         self.adj_mat[u_name].append(v_name)
                     else:
                         self.adj_mat[u_name] = [v_name]
@@ -193,6 +246,12 @@ class StructuralSVGraphSimulator:
         s = "python ../PathLinker/PathLinker.py " + fn_net + " " + fn_src_tgt
         os.system(s)
 
+    def print_edgelist(self):
+        if self.nx_graph is None:
+            self.make_networkx_graph()
+        for line in nx.generate_edgelist(self.nx_graph, data=False):
+            print(line)
+
     def print_fragments(self):
         print("longer fragments:")
         pprint.pprint(self.longer_fragments)
@@ -202,6 +261,11 @@ class StructuralSVGraphSimulator:
         pprint.pprint(self.sources)
         print("target fragments:")
         pprint.pprint(self.targets)
+        print("deletion: ", self.deletion)
+
+    def print_adj_mat(self):
+        assert(self.adj_mat is not None)
+        pprint.pprint(self.adj_mat)
 
     def __str__(self):
         return "longer: " + str(len(self.longer_fragments)) + \
@@ -214,6 +278,6 @@ class StructuralSVGraphSimulator:
 
 
 G = StructuralSVGraphSimulator()
-print(G)
-G.find_k_shortest_paths(100)
+G.draw_nx("graph.pdf")
+#G.find_k_shortest_paths(100)
 

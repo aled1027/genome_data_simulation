@@ -1,0 +1,30 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+Fragment	main.py	/^class Fragment:$/;"	c
+G	main.py	/^G = StructuralSVGraphSimulator()$/;"	v
+StructuralSVGraphSimulator	main.py	/^class StructuralSVGraphSimulator:$/;"	c
+__init__	main.py	/^    def __init__(self):$/;"	m	class:StructuralSVGraphSimulator
+__init__	main.py	/^    def __init__(self, start=0, end=0):$/;"	m	class:Fragment
+__len__	main.py	/^    def __len__(self):$/;"	m	class:Fragment	file:
+__repr__	main.py	/^    def __repr__(self):$/;"	m	class:Fragment	file:
+__repr__	main.py	/^    def __repr__(self):$/;"	m	class:StructuralSVGraphSimulator	file:
+__str__	main.py	/^    def __str__(self):$/;"	m	class:Fragment	file:
+__str__	main.py	/^    def __str__(self):$/;"	m	class:StructuralSVGraphSimulator	file:
+create_shorter_fragments	main.py	/^    def create_shorter_fragments(self):$/;"	m	class:StructuralSVGraphSimulator
+draw_nx	main.py	/^    def draw_nx(self, filename):$/;"	m	class:StructuralSVGraphSimulator
+find_k_shortest_paths	main.py	/^    def find_k_shortest_paths(self, k):$/;"	m	class:StructuralSVGraphSimulator
+find_sources_targets	main.py	/^    def find_sources_targets(self):$/;"	m	class:StructuralSVGraphSimulator
+generate_adjacency_matrix	main.py	/^    def generate_adjacency_matrix(self):$/;"	m	class:StructuralSVGraphSimulator
+generate_fragments	main.py	/^    def generate_fragments(self):$/;"	m	class:StructuralSVGraphSimulator
+generate_fragments_for_longer_sequence	main.py	/^    def generate_fragments_for_longer_sequence(self):$/;"	m	class:StructuralSVGraphSimulator
+intersect	main.py	/^    def intersect(self, other):$/;"	m	class:Fragment
+is_before	main.py	/^    def is_before(self, other):$/;"	m	class:Fragment
+is_contained_in	main.py	/^    def is_contained_in(self, other):$/;"	m	class:Fragment
+make_networkx_graph	main.py	/^    def make_networkx_graph(self):$/;"	m	class:StructuralSVGraphSimulator
+nx_density	main.py	/^    def nx_density(self):$/;"	m	class:StructuralSVGraphSimulator
+print_edgelist	main.py	/^    def print_edgelist(self):$/;"	m	class:StructuralSVGraphSimulator
+print_fragments	main.py	/^    def print_fragments(self):$/;"	m	class:StructuralSVGraphSimulator
