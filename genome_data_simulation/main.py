@@ -71,7 +71,7 @@ class StructuralSVGraphSimulator:
             print("using real parameters")
             self.longer_seq = 600
             self.deletion = Fragment(200, 400)
-            self.coverage = 30
+            self.coverage = 10
             self.poisson_lambda = 10
             self.bases_per_fragment = 50
             self.longer_fragments = []
@@ -83,6 +83,7 @@ class StructuralSVGraphSimulator:
 
         self.generate_fragments()
         self.make_networkx_graph()
+        self.find_sources_targets()
 
     def generate_fragments(self):
         """ main argument"""
@@ -124,11 +125,20 @@ class StructuralSVGraphSimulator:
         not_intersecting_deletion = lambda x : not x.intersect(self.deletion)
         self.sources = []
         self.targets = []
-        for frag in filter(not_intersecting_deletion, li):
+        for i, frag in enumerate(li):
+            if frag.intersect(self.deletion):
+                continue
+            frag_name = str(i) + "_" + str(frag)
             if frag.is_before(self.deletion):
-                self.sources.append(frag)
+                self.sources.append(frag_name)
             else:
-                self.targets.append(frag)
+                self.targets.append(frag_name)
+
+        if not self.sources:
+            print("No source nodes")
+        if not self.targets:
+            print("No target nodes")
+
 
     def make_networkx_graph(self):
         """ based on self.longer_fragments and self.shorter_fragments,
@@ -154,12 +164,6 @@ class StructuralSVGraphSimulator:
                     v_name = str(j) + "_" + str(v)
                     self.nx_graph.add_edge(u_name, v_name, frag=f)
 
-    def old_make_networkx_graph(self):
-        # for two fragments that start in the same place
-        if self.adj_mat is None:
-            self.generate_adjacency_matrix()
-        self.nx_graph = nx.Graph(self.adj_mat)
-
     def nx_density(self):
         assert(self.nx_graph is not None)
         return nx.density(self.nx_graph)
@@ -170,7 +174,7 @@ class StructuralSVGraphSimulator:
 
         # settings
         node_size = 450 #default is 300
-        font_size = 5.5
+        font_size = 4.5
 
         pos = nx.spring_layout(self.nx_graph)
         #pos = nx.spectral_layout(self.nx_graph)
@@ -195,24 +199,8 @@ class StructuralSVGraphSimulator:
         #purple_patch = mpatches.Patch(color='purple', label='both')
         #plt.legend(handles=[red_patch, blue_patch, purple_patch])
 
-        #plt.title("red=shorter, blue=longer, purple=both")
+        plt.title("red=shorter, blue=longer, purple=both")
         plt.savefig(filename)
-
-    def generate_adjacency_matrix(self):
-        """ Using self.longer_fragments and self.shorter_fragments,
-        generate a graph. """
-        # the worst way this could possibly be written.
-        # whatever.
-        self.adj_mat = {}
-        for i,u in enumerate(self.longer_fragments):
-            u_name = str(i) + "_" + str(u)
-            for j,v in enumerate(self.longer_fragments):
-                v_name = str(j) + "_" + str(v)
-                if u.intersect(v):
-                    if u_name in self.adj_mat:
-                        self.adj_mat[u_name].append(v_name)
-                    else:
-                        self.adj_mat[u_name] = [v_name]
 
     def find_k_shortest_paths(self, k):
         """ finds k shortest paths using PathLinker.
@@ -220,11 +208,11 @@ class StructuralSVGraphSimulator:
         and calling PathLinker via the os.
         Assumes all edges have weight 1"""
 
-        if self.nx_graph is None:
-            self.make_networkx_graph()
+        assert(self.nx_graph is not None and "should be made by now")
 
         fn_net = "tmp_net.txt" # a file specifying the network structre
         fn_src_tgt = "tmp_src_tgt.txt" # a file specifying the sources and targets
+
 
         with open(fn_net, 'w') as f:
             f.write("#Node1\tNode2\n")
@@ -232,6 +220,9 @@ class StructuralSVGraphSimulator:
                 nodes = line.strip().split()
                 f.write(str(nodes[0]) + "\t" + str(nodes[1]) + "\t1")
                 f.write("\n")
+
+        # generate sources and targets by grabing all nodes which have attribute
+        # "both"
 
         with open(fn_src_tgt, 'w') as f:
             f.write("#Node Node type\n")
@@ -278,6 +269,9 @@ class StructuralSVGraphSimulator:
 
 
 G = StructuralSVGraphSimulator()
+print(G)
+print(G.nx_density())
+G.find_k_shortest_paths(100)
 G.draw_nx("graph.pdf")
 #G.find_k_shortest_paths(100)
 
