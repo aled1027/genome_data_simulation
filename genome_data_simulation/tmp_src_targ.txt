@@ -1,4 +1,0 @@
-#Node Node type
-8	target
-8	target
-11	target

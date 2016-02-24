@@ -8,9 +8,16 @@ import pprint
 import os
 
 class Fragment:
-    def __init__(self, start=0, end=0):
-        self.start = start
-        self.end = end
+    def __init__(self, start=0, end=0, key=0, string=None):
+        if string is None:
+            self.start = start
+            self.end = end
+            self.key = key
+        else:
+            s = string.strip().split("_")
+            self.start = int(s[0])
+            self.end = int(s[1])
+            self.key = int(s[2])
 
     def intersect(self, other):
         """ Returns true if self and other intersect
@@ -31,7 +38,7 @@ class Fragment:
 
     def is_before(self, other):
         """ returns true if self is finishes before other"""
-        if self.end < other.start:
+        if self.end <= other.start:
             return True
         return False
 
@@ -45,8 +52,7 @@ class Fragment:
         return self.end - self.start
 
     def __str__(self):
-        return str(self.start) + ":" + str(self.end)
-#        return "Fragment(start={}, end={})".format(self.start, self.end)
+        return str(self.start) + "_" + str(self.end) + "_" + str(self.key)
 
     def __repr__(self):
         return str(self)
@@ -61,12 +67,6 @@ class StructuralSVGraphSimulator:
             self.coverage = 3
             self.poisson_lambda = 1
             self.bases_per_fragment = 3
-            self.longer_fragments = []
-            self.shorter_fragments = []
-            self.sources = []
-            self.targets = []
-            self.adj_mat = None
-            self.nx_graph = None
         else:
             print("using real parameters")
             self.longer_seq = 600
@@ -74,80 +74,60 @@ class StructuralSVGraphSimulator:
             self.coverage = 10
             self.poisson_lambda = 10
             self.bases_per_fragment = 50
-            self.longer_fragments = []
-            self.shorter_fragments = []
-            self.sources = []
-            self.targets = []
-            self.adj_mat = None
-            self.nx_graph = None
+
+        self.longer_fragments = []
+        self.shorter_fragments = []
+        self.nx_graph = None
 
         self.generate_fragments()
         self.make_networkx_graph()
-        self.find_sources_targets()
 
     def generate_fragments(self):
         """ main argument"""
         self.generate_fragments_for_longer_sequence()
         self.create_shorter_fragments()
-        self.find_sources_targets()
 
     def generate_fragments_for_longer_sequence(self):
+        count = 0
         for _ in range(self.coverage):
             prev = 0
             while True:
                 start = prev + np.random.poisson(self.poisson_lambda)
                 end = start + self.bases_per_fragment
                 if end <= self.longer_seq:
-                    self.longer_fragments.append(Fragment(start, start + self.bases_per_fragment))
+                    self.longer_fragments.append(Fragment(start, start + self.bases_per_fragment, count))
                     prev = start
+                    count += 1
                 else:
                     break
 
     def create_shorter_fragments(self):
         """creates shorter_fragment based on longer_fragments.
         assumes longer_fragments is already populated"""
-        # again, writing this in the most naiive, unpythonic way
+
+        # again, writing this in the most naive, unpythonic way
+
         self.shorter_fragments = copy.deepcopy(self.longer_fragments)
         not_contained = lambda x : not x.is_contained_in(self.deletion)
         self.shorter_fragments = list(filter(not_contained, self.shorter_fragments))
 
+        count = len(self.longer_fragments)
         for frag in self.shorter_fragments:
             if frag.intersect(self.deletion):
+                frag.key = count
+                count += 1
                 if frag.start < self.deletion.start:
                     frag.end = self.deletion.start
                 else:
                     frag.start = self.deletion.end
-
-    def find_sources_targets(self):
-        """populates self.sources and self.targets with the
-        fragments are before and after the deletion"""
-        li = copy.deepcopy(self.longer_fragments)
-        not_intersecting_deletion = lambda x : not x.intersect(self.deletion)
-        self.sources = []
-        self.targets = []
-        for i, frag in enumerate(li):
-            if frag.intersect(self.deletion):
-                continue
-            frag_name = str(i) + "_" + str(frag)
-            if frag.is_before(self.deletion):
-                self.sources.append(frag_name)
-            else:
-                self.targets.append(frag_name)
-
-        if not self.sources:
-            print("No source nodes")
-        if not self.targets:
-            print("No target nodes")
-
 
     def make_networkx_graph(self):
         """ based on self.longer_fragments and self.shorter_fragments,
         make a networkx graph"""
         self.nx_graph = nx.Graph()
         all_nodes = list(set(self.longer_fragments).union(set(self.shorter_fragments)))
-        for i,u in enumerate(all_nodes):
-            u_name = str(i) + "_" + str(u)
 
+        for u in all_nodes:
             f = None
             if u in self.longer_fragments and u in self.shorter_fragments:
                 f = "both"
@@ -157,12 +137,12 @@ class StructuralSVGraphSimulator:
                 f = "longer"
             else:
                 raise RuntimeError("messed up")
-            self.nx_graph.add_node(u_name, frag=f)
+            self.nx_graph.add_node(str(u), frag=f)
 
-            for j,v in enumerate(all_nodes):
+        for u in all_nodes:
+            for v in all_nodes:
                 if u.intersect(v):
-                    v_name = str(j) + "_" + str(v)
-                    self.nx_graph.add_edge(u_name, v_name, frag=f)
+                    self.nx_graph.add_edge(str(u), str(v))
 
     def nx_density(self):
         assert(self.nx_graph is not None)
@@ -192,13 +172,6 @@ class StructuralSVGraphSimulator:
         nx.draw_networkx_edges(self.nx_graph, pos)
         nx.draw_networkx_labels(self.nx_graph, pos, font_size=font_size)
 
-        # For adding legend -- covering up some nodes
-        # import matplotlib.patches as mpatches
-        #blue_patch = mpatches.Patch(color='blue', label='only longer')
-        #red_patch = mpatches.Patch(color='red', label='only shorter')
-        #purple_patch = mpatches.Patch(color='purple', label='both')
-        #plt.legend(handles=[red_patch, blue_patch, purple_patch])
-
         plt.title("red=shorter, blue=longer, purple=both")
         plt.savefig(filename)
 
@@ -222,14 +195,16 @@ class StructuralSVGraphSimulator:
                 f.write("\n")
 
         # generate sources and targets by grabing all nodes which have attribute
-        # "both"
+        both_fragments = [Fragment(string=s) for s,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'both']
+        sources = list(filter(lambda x: x.is_before(self.deletion), both_fragments))
+        targets = list(filter(lambda x: self.deletion.is_before(x), both_fragments))
 
         with open(fn_src_tgt, 'w') as f:
             f.write("#Node Node type\n")
-            for src in self.sources:
+            for src in sources:
                 f.write(str(src) + "\tsource")
                 f.write("\n")
-            for tgt in self.targets:
+            for tgt in targets:
                 f.write(str(tgt) + "\ttarget")
                 f.write("\n")
 
@@ -238,8 +213,7 @@ class StructuralSVGraphSimulator:
         os.system(s)
 
     def print_edgelist(self):
-        if self.nx_graph is None:
-            self.make_networkx_graph()
+        assert(self.nx_graph is not None)
         for line in nx.generate_edgelist(self.nx_graph, data=False):
             print(line)
 
@@ -248,21 +222,11 @@ class StructuralSVGraphSimulator:
         pprint.pprint(self.longer_fragments)
         print("shorter fragments:")
         pprint.pprint(self.shorter_fragments)
-        print("source fragments:")
-        pprint.pprint(self.sources)
-        print("target fragments:")
-        pprint.pprint(self.targets)
         print("deletion: ", self.deletion)
-
-    def print_adj_mat(self):
-        assert(self.adj_mat is not None)
-        pprint.pprint(self.adj_mat)
 
     def __str__(self):
         return "longer: " + str(len(self.longer_fragments)) + \
-                "\nshorter: " + str(len(self.shorter_fragments)) + \
-                "\nsources: " + str(len(self.sources)) + \
-                "\ntargets: " + str(len(self.targets))
+                "\nshorter: " + str(len(self.shorter_fragments))
 
     def __repr__(self):
         return str(self)
@@ -271,7 +235,7 @@ class StructuralSVGraphSimulator:
 G = StructuralSVGraphSimulator()
 print(G)
 print(G.nx_density())
-G.find_k_shortest_paths(100)
+G.print_fragments()
 G.draw_nx("graph.pdf")
-#G.find_k_shortest_paths(100)
+G.find_k_shortest_paths(100)
 
