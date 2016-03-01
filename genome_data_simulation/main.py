@@ -7,7 +7,8 @@ import networkx as nx
 import pprint
 import os
 
-class Fragment:
+class SimpleFragment:
+    """ a simple simple fragment with a start and stop"""
     def __init__(self, start=0, end=0, key=0, string=None):
         if string is None:
             self.start = start
@@ -21,7 +22,7 @@ class Fragment:
 
     def intersect(self, other):
         """ Returns true if self and other intersect
-        :param other: Fragment
+        :param other: SimpleFragment
         """
         if self.start <= other.start <= self.end or \
                 self.start <= other.end <= self.end:
@@ -31,7 +32,7 @@ class Fragment:
 
     def is_contained_in(self, other):
         """ Returns True if self is totally inside of other
-        :param other: Fragment"""
+        :param other: SimpleFragment"""
         if other.start <= self.start and self.end <= other.end:
             return True
         return False
@@ -57,20 +58,71 @@ class Fragment:
     def __repr__(self):
         return str(self)
 
+class Fragment:
+    def __init__(self, simple_fragments=None):
+        self.simple_fragments = simple_fragments
+
+    def intersect(self, other):
+        """
+        :param other: Fragment
+        """
+        return any(s.intersect(o) for s in self.simple_fragments for o in other.simple_fragments)
+
+    def __str__(self):
+        s = ""
+        for sf in self.simple_fragments:
+            s += str(sf) + "\n"
+        return s[0:-1]
+
+    def __repr__(self):
+        return str(self)
+
+    def is_before(self, other):
+        """
+        returns true if all self.simple_fragments are before other.simple_fragments else false
+        :param other: Fragment
+        """
+        return all(s.is_before(o) for s in self.simple_fragments for o in other.simple_fragments)
+
+    def is_contained_in(self, other):
+        s = sorted(self.simple_fragments, key=lambda f : f.start)
+        o = sorted(other.simple_fragments, key=lambda f : f.start)
+        return o[0].start <= s[0].start and s[-1].end <= o[-1].end
+
+    def __hash__(self):
+        return sum(hash(s)*(100**i) for i,s in enumerate(self.simple_fragments))
+
+    def __len__(self):
+        return sum(len(s) for s in self.simple_fragments)
+
+    def __eq__(self, other):
+        sf = sorted(self.simple_fragments, key=lambda f : f.start)
+        of = sorted(other.simple_fragments, key=lambda f : f.start)
+        for s,o in zip(sf, of):
+            if s != o:
+                return False
+        return False
+
+    def starts_before(self, other):
+        sf = sorted(self.simple_fragments, key=lambda f : f.start)
+        of = sorted(other.simple_fragments, key=lambda f : f.start)
+        return sf[0].start < of[0].start
+
+
 class StructuralSVGraphSimulator:
     def __init__(self):
-        simple = True
+        simple = False
         if simple:
             print("using simple parameters")
             self.longer_seq = 12
-            self.deletion = Fragment(6, 7)
+            self.deletion = Fragment([SimpleFragment(6, 7)])
             self.coverage = 3
             self.poisson_lambda = 1
             self.bases_per_fragment = 3
         else:
             print("using real parameters")
             self.longer_seq = 600
-            self.deletion = Fragment(200, 400)
+            self.deletion = Fragment([SimpleFragment(200, 400)])
             self.coverage = 10
             self.poisson_lambda = 10
             self.bases_per_fragment = 50
@@ -95,7 +147,7 @@ class StructuralSVGraphSimulator:
                 start = prev + np.random.poisson(self.poisson_lambda)
                 end = start + self.bases_per_fragment
                 if end <= self.longer_seq:
-                    self.longer_fragments.append(Fragment(start, start + self.bases_per_fragment, count))
+                    self.longer_fragments.append(Fragment([SimpleFragment(start, start + self.bases_per_fragment, count)]))
                     prev = start
                     count += 1
                 else:
@@ -104,42 +156,66 @@ class StructuralSVGraphSimulator:
     def create_shorter_fragments(self):
         """creates shorter_fragment based on longer_fragments.
         assumes longer_fragments is already populated"""
-
         # again, writing this in the most naive, unpythonic way
-
-        self.shorter_fragments = copy.deepcopy(self.longer_fragments)
-        not_contained = lambda x : not x.is_contained_in(self.deletion)
-        self.shorter_fragments = list(filter(not_contained, self.shorter_fragments))
-
         count = len(self.longer_fragments)
-        for frag in self.shorter_fragments:
-            if frag.intersect(self.deletion):
-                frag.key = count
-                count += 1
-                if frag.start < self.deletion.start:
-                    frag.end = self.deletion.start
+        for _ in range(self.coverage):
+            prev = 0
+            while True:
+                start = prev + np.random.poisson(self.poisson_lambda)
+                if self.deletion.simple_fragments[0].start <= start <= self.deletion.simple_fragments[0].end:
+                    prev = self.deletion.simple_fragments[0].end + 1
+                    continue
+
+                end = start + self.bases_per_fragment
+
+                if end <= self.longer_seq:
+                    self.shorter_fragments.append(Fragment([SimpleFragment(start, start + self.bases_per_fragment, count)]))
+                    prev = start
+                    count += 1
                 else:
-                    frag.start = self.deletion.end
+                    break
+
+
 
     def make_networkx_graph(self):
         """ based on self.longer_fragments and self.shorter_fragments,
         make a networkx graph"""
+
+        """
+        TODO work on this.
+        our nodes are really Fragments (not SimpleFragments)
+        labels should be: before, after, long, short (as opposed to current labels)
+        """
+
         self.nx_graph = nx.Graph()
-        all_nodes = list(set(self.longer_fragments).union(set(self.shorter_fragments)))
 
-        for u in all_nodes:
-            f = None
-            if u in self.longer_fragments and u in self.shorter_fragments:
-                f = "both"
-            elif u in self.shorter_fragments:
-                f = "shorter"
-            elif u in self.longer_fragments:
-                f = "longer"
-            else:
-                raise RuntimeError("messed up")
-            self.nx_graph.add_node(str(u), frag=f)
+        long_simple_frags = []
+        for frag in self.longer_fragments:
+            long_simple_frags.extend(frag.simple_fragments)
+        long_simple_frags = set(long_simple_frags)
 
-        for u in all_nodes:
+        short_simple_frags = []
+        for frag in self.shorter_fragments:
+            short_simple_frags.extend(frag.simple_fragments)
+        short_simple_frags = set(short_simple_frags)
+
+        both_simple_frags = set(long_simple_frags.intersection(short_simple_frags))
+        long_simple_frags = set(long_simple_frags.difference(both_simple_frags))
+        short_simple_frags = set(short_simple_frags.difference(both_simple_frags))
+
+        for u in list(both_simple_frags):
+            self.nx_graph.add_node(str(u), frag="both")
+
+        for u in list(long_simple_frags):
+            self.nx_graph.add_node(str(u), frag="longer")
+
+        for u in list(short_simple_frags):
+            self.nx_graph.add_node(str(u), frag="shorter")
+
+        all_nodes = list(set(both_simple_frags.union(long_simple_frags).union(short_simple_frags)))
+
+        # need to make this based on fragments, not simple fragments
+        for u in :
             for v in all_nodes:
                 if u.intersect(v):
                     self.nx_graph.add_edge(str(u), str(v))
@@ -162,12 +238,12 @@ class StructuralSVGraphSimulator:
         blue_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'longer']
         red_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'shorter']
         purple_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'both']
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=purple_nodes, \
+                node_size=node_size, node_color='#aa8cc5')
         nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=blue_nodes, \
                 node_size=node_size, node_color='b')
         nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=red_nodes, \
                 node_size=node_size, node_color='r')
-        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=purple_nodes, \
-                node_size=node_size, node_color='#aa8cc5')
 
         nx.draw_networkx_edges(self.nx_graph, pos)
         nx.draw_networkx_labels(self.nx_graph, pos, font_size=font_size)
@@ -212,6 +288,21 @@ class StructuralSVGraphSimulator:
         s = "python ../PathLinker/PathLinker.py " + fn_net + " " + fn_src_tgt
         os.system(s)
 
+        # read from file
+        fn = "out_k_{}-ranked-edges.txt".format(k)
+        with open(fn, 'r') as f:
+            for line in f:
+                if line[0] == '#':
+                    continue
+                l = line.split()
+                tail = Fragment(l[0])
+                head = Fragment(l[1])
+                index = l[2]
+                print(tail, head, index)
+
+    def draw_lines(self):
+        pass
+
     def print_edgelist(self):
         assert(self.nx_graph is not None)
         for line in nx.generate_edgelist(self.nx_graph, data=False):
@@ -235,7 +326,7 @@ class StructuralSVGraphSimulator:
 G = StructuralSVGraphSimulator()
 print(G)
 print(G.nx_density())
-G.print_fragments()
 G.draw_nx("graph.pdf")
-G.find_k_shortest_paths(100)
+#G.print_fragments()
+##G.find_k_shortest_paths(100)
 
