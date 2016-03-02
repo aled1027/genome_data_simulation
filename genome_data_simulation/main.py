@@ -175,7 +175,7 @@ class Fragment:
 
 class StructuralSVGraphSimulator:
     def __init__(self):
-        simple = True
+        simple = False
         if simple:
             print("using simple parameters")
             self.longer_seq = 50
@@ -185,10 +185,10 @@ class StructuralSVGraphSimulator:
             self.bases_per_fragment = 6
         else:
             print("using real parameters")
-            self.longer_seq = 600
-            self.deletion = Fragment([SimpleFragment(200, 400)])
-            self.coverage = 10
-            self.poisson_lambda = 10
+            self.longer_seq = 1200
+            self.deletion = Fragment([SimpleFragment(500, 700)])
+            self.coverage = 5
+            self.poisson_lambda = 50
             self.bases_per_fragment = 50
 
         self.longer_fragments = []
@@ -222,7 +222,6 @@ class StructuralSVGraphSimulator:
         assumes longer_fragments is already populated"""
         # again, writing this in the most naive, unpythonic way
         for _ in range(self.coverage):
-            print('break')
             prev = 0
             while True:
                 start = prev + np.random.poisson(self.poisson_lambda)
@@ -230,7 +229,6 @@ class StructuralSVGraphSimulator:
                 frag = Fragment([SimpleFragment(start, end)])
 
                 if end >= self.longer_seq: # and end of sequence
-                    print('here')
                     break
 
                 if self.deletion.intersect(frag):
@@ -241,32 +239,25 @@ class StructuralSVGraphSimulator:
                     after.add(intersecting)
 
                     if len(before) == 0 and len(after) == 0:
-                        print('case 1')
                         prev = self.deletion.simple_fragments[0].end
                         pass
                     elif len(before) == 0 and len(after) != 0:
-                        print('case 2')
                         self.shorter_fragments.append(Fragment([after]))
                         prev = after.end
 
                     elif len(before) != 0 and len(after) == 0:
-                        print('case 3')
                         self.shorter_fragments.append(Fragment([before]))
                         prev = self.deletion.simple_fragments[0].end
 
                     elif len(before) != 0 and len(after) != 0:
-                        print('case 4')
-                        print(frag)
                         self.shorter_fragments.append(Fragment([before, after]))
                         prev = after.end
                     else:
                         print('bug')
-                    print(self.shorter_fragments[-1].simple_fragments)
 
                 else:
                     self.shorter_fragments.append(frag)
                     prev = start
-                print(prev)
 
 
 
@@ -313,37 +304,6 @@ class StructuralSVGraphSimulator:
     def nx_density(self):
         assert(self.nx_graph is not None)
         return nx.density(self.nx_graph)
-
-    def draw_nx(self, filename):
-        print("drawing")
-        assert(self.nx_graph is not None)
-
-        # settings
-        node_size = 450 #default is 300
-        font_size = 4.5
-
-        pos = nx.spring_layout(self.nx_graph)
-        #pos = nx.spectral_layout(self.nx_graph)
-
-        blue_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'long']
-        red_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'short']
-        purple_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'before']
-        green_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'after']
-        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=purple_nodes, \
-                node_size=node_size, node_color='#aa8cc5')
-        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=blue_nodes, \
-                node_size=node_size, node_color='b')
-        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=red_nodes, \
-                node_size=node_size, node_color='r')
-        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=green_nodes, \
-                node_size=node_size, node_color='g')
-
-        nx.draw_networkx_edges(self.nx_graph, pos)
-        #nx.draw_networkx_labels(self.nx_graph, pos, font_size=font_size)
-
-        plt.title("red=shorter, blue=longer, purple=before, green=after")
-        plt.savefig(filename)
-
     def find_k_shortest_paths(self, k):
         """ finds k shortest paths using PathLinker.
         This uses a roundabout, verbose method by writing to files,
@@ -391,9 +351,41 @@ class StructuralSVGraphSimulator:
                 tail = Fragment(l[0])
                 head = Fragment(l[1])
                 index = l[2]
-                print(tail, head, index)
 
-    def draw_degree_histogram(self):
+    def draw_nx(self, filename):
+        print("drawing graph")
+        assert(self.nx_graph is not None)
+
+        # settings
+        node_size = 450 #default is 300
+        font_size = 4.5
+
+        pos = nx.spring_layout(self.nx_graph)
+        #pos = nx.spectral_layout(self.nx_graph)
+
+        blue_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'long']
+        red_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'short']
+        purple_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'before']
+        green_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'after']
+        plt.clf()
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=purple_nodes, \
+                node_size=node_size, node_color='#aa8cc5')
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=blue_nodes, \
+                node_size=node_size, node_color='b')
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=red_nodes, \
+                node_size=node_size, node_color='r')
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=green_nodes, \
+                node_size=node_size, node_color='g')
+
+        nx.draw_networkx_edges(self.nx_graph, pos)
+        #nx.draw_networkx_labels(self.nx_graph, pos, font_size=font_size)
+
+        plt.title("red=shorter, blue=longer, purple=before, green=after")
+        plt.savefig(filename)
+
+
+    def draw_degree_histogram(self, filename):
+        print("drawing histogram")
         assert(self.nx_graph is not None and "should be made by now")
         degree_sequence=sorted(nx.degree(self.nx_graph).values(),reverse=True) # degree sequence
         dmax=max(degree_sequence)
@@ -402,10 +394,11 @@ class StructuralSVGraphSimulator:
         plt.title("Degree rank plot")
         plt.ylabel("degree")
         plt.xlabel("rank")
-        plt.savefig("degree_histogram.pdf")
+        plt.savefig(filename)
 
-    def draw_lines(self):
+    def draw_lines(self, filename):
         """ draws the cool (or lame, depending on your perspective) plot of all reads"""
+        print("drawing lines")
         plt.clf()
 
         # draw longer fragments
@@ -421,7 +414,6 @@ class StructuralSVGraphSimulator:
         # draw shorter fragments
         for i, frag in enumerate(self.shorter_fragments):
             j = len(self.longer_fragments) + i
-            print(frag.simple_fragments)
             for f in frag.simple_fragments:
                 xs = [f.start, f.end]
                 ys = [(j / tot_frags) * 400] * 2
@@ -436,9 +428,7 @@ class StructuralSVGraphSimulator:
         plt.plot(xs, ys, 'k-', lw=1)
         plt.title("blue = longer, red = shorter")
 
-        #plt.plot(xs, ys, 'r-', lw=1)
-
-        plt.savefig("line.pdf")
+        plt.savefig(filename)
 
     def print_edgelist(self):
         assert(self.nx_graph is not None)
@@ -463,9 +453,9 @@ class StructuralSVGraphSimulator:
 G = StructuralSVGraphSimulator()
 print(G)
 print(G.nx_density())
-#G.draw_nx("graph.pdf")
-#G.draw_degree_histogram()
-G.draw_lines()
+G.draw_nx("graph.pdf")
+G.draw_degree_histogram("histogram.pdf")
+G.draw_lines("lines.pdf")
 #G.print_fragments()
 ##G.find_k_shortest_paths(100)
 
