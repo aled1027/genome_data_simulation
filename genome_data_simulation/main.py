@@ -6,26 +6,32 @@ import numpy as np
 import networkx as nx
 import pprint
 import os
+import random
 
 class SimpleFragment:
     """ a simple simple fragment with a start and stop"""
-    def __init__(self, start=0, end=0, key=0, string=None):
+    def __init__(self, start=0, end=0, string=None):
         if string is None:
             self.start = start
             self.end = end
-            self.key = key
+            self.key = random.randint(0,10000)
         else:
             s = string.strip().split("_")
             self.start = int(s[0])
             self.end = int(s[1])
             self.key = int(s[2])
 
+    def add(self, other):
+        self.end += len(other)
+
     def intersect(self, other):
         """ Returns true if self and other intersect
         :param other: SimpleFragment
         """
         if self.start <= other.start <= self.end or \
-                self.start <= other.end <= self.end:
+                self.start <= other.end <= self.end or \
+                other.start <= self.start <= other.end or \
+                other.start <= self.end <= other.end:
             return True
         else:
             return False
@@ -108,17 +114,75 @@ class Fragment:
         of = sorted(other.simple_fragments, key=lambda f : f.start)
         return sf[0].start < of[0].start
 
+    def frag_thats_before(self, other):
+        """ returns portion of frag thats before other"""
+        assert(len(self.simple_fragments) == len(other.simple_fragments) == 1\
+                and "only works for simple case")
+        if self.simple_fragments[0].start >= other.simple_fragments[0].start:
+            return SimpleFragment(0,0)
+        else:
+            return SimpleFragment(self.simple_fragments[0].start , other.simple_fragments[0].start)
+
+    def frag_thats_intersecting(self, other):
+        """ returns portion of frag thats before other"""
+        assert(len(self.simple_fragments) == len(other.simple_fragments) == 1\
+                and "only works for simple case")
+        e = None
+        s = None
+        if self.simple_fragments[0].intersect(other.simple_fragments[0]):
+            if self.simple_fragments[0].start <= other.simple_fragments[0].start:
+                s = other.simple_fragments[0].start
+            else:
+                s = self.simple_fragments[0].start
+
+            if self.simple_fragments[0].end <= other.simple_fragments[0].end:
+                e = self.simple_fragments[0].end
+            else:
+                e = other.simple_fragments[0].end
+        else:
+            s = 0
+            e = 0
+        return SimpleFragment(s,e)
+
+    def frag_thats_after(self, other):
+        """ returns portion of frag thats after other"""
+        assert(len(self.simple_fragments) == len(other.simple_fragments) == 1\
+                and "only works for simple case")
+        if other.simple_fragments[0].end >= self.simple_fragments[0].end:
+            return SimpleFragment(other.simple_fragments[0].end, other.simple_fragments[0].end)
+        else:
+            return SimpleFragment(other.simple_fragments[0].end, self.simple_fragments[0].end)
+
+
+
+    def get_overlap(self, other):
+        assert(len(self.simple_fragments) == len(other.simple_fragments) == 1\
+                and "only works for simple case")
+        if self.intersect(other) == False:
+            return SimpleFragment(0,0)
+        elif self.is_contained_in(other):
+            return SimpleFragment(self.simple_fragment[0].start, self.simple_fragment[0].end)
+        elif other.is_contained_in(self):
+            return SimpleFragment(other.simple_fragment[0].start, other.simple_fragment[0].end)
+        elif self.start < other.start:
+            return SimpleFragment(0, self.end - other.start)
+        else:
+            return SimpleFragment(0, other.end - self.start)
+
+
+
+
 
 class StructuralSVGraphSimulator:
     def __init__(self):
-        simple = False
+        simple = True
         if simple:
             print("using simple parameters")
-            self.longer_seq = 12
-            self.deletion = Fragment([SimpleFragment(6, 7)])
-            self.coverage = 3
-            self.poisson_lambda = 1
-            self.bases_per_fragment = 3
+            self.longer_seq = 50
+            self.deletion = Fragment([SimpleFragment(20, 30)])
+            self.coverage = 1 # coverage per shorter/longer
+            self.poisson_lambda = 4
+            self.bases_per_fragment = 6
         else:
             print("using real parameters")
             self.longer_seq = 600
@@ -147,7 +211,7 @@ class StructuralSVGraphSimulator:
                 start = prev + np.random.poisson(self.poisson_lambda)
                 end = start + self.bases_per_fragment
                 if end <= self.longer_seq:
-                    self.longer_fragments.append(Fragment([SimpleFragment(start, start + self.bases_per_fragment, count)]))
+                    self.longer_fragments.append(Fragment([SimpleFragment(start, start + self.bases_per_fragment)]))
                     prev = start
                     count += 1
                 else:
@@ -157,23 +221,52 @@ class StructuralSVGraphSimulator:
         """creates shorter_fragment based on longer_fragments.
         assumes longer_fragments is already populated"""
         # again, writing this in the most naive, unpythonic way
-        count = len(self.longer_fragments)
         for _ in range(self.coverage):
+            print('break')
             prev = 0
             while True:
                 start = prev + np.random.poisson(self.poisson_lambda)
-                if self.deletion.simple_fragments[0].start <= start <= self.deletion.simple_fragments[0].end:
-                    prev = self.deletion.simple_fragments[0].end + 1
-                    continue
-
                 end = start + self.bases_per_fragment
+                frag = Fragment([SimpleFragment(start, end)])
 
-                if end <= self.longer_seq:
-                    self.shorter_fragments.append(Fragment([SimpleFragment(start, start + self.bases_per_fragment, count)]))
-                    prev = start
-                    count += 1
-                else:
+                if end >= self.longer_seq: # and end of sequence
+                    print('here')
                     break
+
+                if self.deletion.intersect(frag):
+                    # find how much overlap
+                    before = frag.frag_thats_before(self.deletion)
+                    intersecting = frag.frag_thats_intersecting(self.deletion)
+                    after = frag.frag_thats_after(self.deletion)
+                    after.add(intersecting)
+
+                    if len(before) == 0 and len(after) == 0:
+                        print('case 1')
+                        prev = self.deletion.simple_fragments[0].end
+                        pass
+                    elif len(before) == 0 and len(after) != 0:
+                        print('case 2')
+                        self.shorter_fragments.append(Fragment([after]))
+                        prev = after.end
+
+                    elif len(before) != 0 and len(after) == 0:
+                        print('case 3')
+                        self.shorter_fragments.append(Fragment([before]))
+                        prev = self.deletion.simple_fragments[0].end
+
+                    elif len(before) != 0 and len(after) != 0:
+                        print('case 4')
+                        print(frag)
+                        self.shorter_fragments.append(Fragment([before, after]))
+                        prev = after.end
+                    else:
+                        print('bug')
+                    print(self.shorter_fragments[-1].simple_fragments)
+
+                else:
+                    self.shorter_fragments.append(frag)
+                    prev = start
+                print(prev)
 
 
 
@@ -182,42 +275,39 @@ class StructuralSVGraphSimulator:
         make a networkx graph"""
 
         """
-        TODO work on this.
         our nodes are really Fragments (not SimpleFragments)
         labels should be: before, after, long, short (as opposed to current labels)
         """
 
         self.nx_graph = nx.Graph()
 
-        long_simple_frags = []
+
         for frag in self.longer_fragments:
-            long_simple_frags.extend(frag.simple_fragments)
-        long_simple_frags = set(long_simple_frags)
+            if frag.is_before(self.deletion):
+                self.nx_graph.add_node(str(frag), frag="before")
+            elif self.deletion.is_before(frag):
+                self.nx_graph.add_node(str(frag), frag="after")
+            else:
+                self.nx_graph.add_node(str(frag), frag="long")
 
-        short_simple_frags = []
         for frag in self.shorter_fragments:
-            short_simple_frags.extend(frag.simple_fragments)
-        short_simple_frags = set(short_simple_frags)
-
-        both_simple_frags = set(long_simple_frags.intersection(short_simple_frags))
-        long_simple_frags = set(long_simple_frags.difference(both_simple_frags))
-        short_simple_frags = set(short_simple_frags.difference(both_simple_frags))
-
-        for u in list(both_simple_frags):
-            self.nx_graph.add_node(str(u), frag="both")
-
-        for u in list(long_simple_frags):
-            self.nx_graph.add_node(str(u), frag="longer")
-
-        for u in list(short_simple_frags):
-            self.nx_graph.add_node(str(u), frag="shorter")
-
-        all_nodes = list(set(both_simple_frags.union(long_simple_frags).union(short_simple_frags)))
+            if frag.is_before(self.deletion):
+                self.nx_graph.add_node(str(frag), frag="before")
+            elif self.deletion.is_before(frag):
+                self.nx_graph.add_node(str(frag), frag="after")
+            else:
+                self.nx_graph.add_node(str(frag), frag="short")
 
         # need to make this based on fragments, not simple fragments
-        for u in :
+
+
+        longer = copy.deepcopy(self.longer_fragments)
+        shorter = copy.deepcopy(self.shorter_fragments)
+        all_nodes = list(set(longer).union(set(shorter)))
+
+        for u in all_nodes:
             for v in all_nodes:
-                if u.intersect(v):
+                if u != v and u.intersect(v):
                     self.nx_graph.add_edge(str(u), str(v))
 
     def nx_density(self):
@@ -235,20 +325,23 @@ class StructuralSVGraphSimulator:
         pos = nx.spring_layout(self.nx_graph)
         #pos = nx.spectral_layout(self.nx_graph)
 
-        blue_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'longer']
-        red_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'shorter']
-        purple_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'both']
+        blue_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'long']
+        red_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'short']
+        purple_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'before']
+        green_nodes = [n for n,d in self.nx_graph.nodes_iter(data=True) if d['frag'] == 'after']
         nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=purple_nodes, \
                 node_size=node_size, node_color='#aa8cc5')
         nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=blue_nodes, \
                 node_size=node_size, node_color='b')
         nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=red_nodes, \
                 node_size=node_size, node_color='r')
+        nx.draw_networkx_nodes(self.nx_graph, pos, nodelist=green_nodes, \
+                node_size=node_size, node_color='g')
 
         nx.draw_networkx_edges(self.nx_graph, pos)
-        nx.draw_networkx_labels(self.nx_graph, pos, font_size=font_size)
+        #nx.draw_networkx_labels(self.nx_graph, pos, font_size=font_size)
 
-        plt.title("red=shorter, blue=longer, purple=both")
+        plt.title("red=shorter, blue=longer, purple=before, green=after")
         plt.savefig(filename)
 
     def find_k_shortest_paths(self, k):
@@ -300,8 +393,52 @@ class StructuralSVGraphSimulator:
                 index = l[2]
                 print(tail, head, index)
 
+    def draw_degree_histogram(self):
+        assert(self.nx_graph is not None and "should be made by now")
+        degree_sequence=sorted(nx.degree(self.nx_graph).values(),reverse=True) # degree sequence
+        dmax=max(degree_sequence)
+        plt.clf()
+        plt.loglog(degree_sequence,'b-',marker='o')
+        plt.title("Degree rank plot")
+        plt.ylabel("degree")
+        plt.xlabel("rank")
+        plt.savefig("degree_histogram.pdf")
+
     def draw_lines(self):
-        pass
+        """ draws the cool (or lame, depending on your perspective) plot of all reads"""
+        plt.clf()
+
+        # draw longer fragments
+        longer = copy.deepcopy(self.longer_fragments)
+        shorter = copy.deepcopy(self.shorter_fragments)
+        tot_frags = len(list(set(longer).union(set(shorter))))
+        for i, frag in enumerate(self.longer_fragments):
+            for f in frag.simple_fragments:
+                xs = [f.start, f.end]
+                ys = [(i / tot_frags) * 400] * 2
+                plt.plot(xs, ys, 'b-', lw=1)
+
+        # draw shorter fragments
+        for i, frag in enumerate(self.shorter_fragments):
+            j = len(self.longer_fragments) + i
+            print(frag.simple_fragments)
+            for f in frag.simple_fragments:
+                xs = [f.start, f.end]
+                ys = [(j / tot_frags) * 400] * 2
+                plt.plot(xs, ys, 'r-', lw=1)
+
+        # draw deletion
+        xs = [self.deletion.simple_fragments[0].start, self.deletion.simple_fragments[0].start]
+        ys = [0, 400]
+        plt.plot(xs, ys, 'k-', lw=1)
+        xs = [self.deletion.simple_fragments[0].end, self.deletion.simple_fragments[0].end]
+        ys = [0, 400]
+        plt.plot(xs, ys, 'k-', lw=1)
+        plt.title("blue = longer, red = shorter")
+
+        #plt.plot(xs, ys, 'r-', lw=1)
+
+        plt.savefig("line.pdf")
 
     def print_edgelist(self):
         assert(self.nx_graph is not None)
@@ -326,7 +463,9 @@ class StructuralSVGraphSimulator:
 G = StructuralSVGraphSimulator()
 print(G)
 print(G.nx_density())
-G.draw_nx("graph.pdf")
+#G.draw_nx("graph.pdf")
+#G.draw_degree_histogram()
+G.draw_lines()
 #G.print_fragments()
 ##G.find_k_shortest_paths(100)
 

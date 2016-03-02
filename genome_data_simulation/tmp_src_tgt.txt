@@ -1,8 +1,5 @@
 #Node Node type
-3_6_1	source
+2_5_19	source
 1_4_0	source
-2_5_20	source
-0_3_9	source
-8_11_7	target
-9_12_18	target
-7_10_4	target
+8_11_9	target
+9_12_10	target
